@@ -23,9 +23,10 @@ def load_css(file_name):
 
 load_css("style.css")
 
-# --- Categorias (movidas para o topo) ---
+# --- Categorias (Atualizadas) ---
 CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros']
-CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Investimentos', 'Outros']
+CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Outros'] # 'Investimentos' saiu daqui
+CATEGORIAS_INVESTIMENTO = ['Ações', 'Fundos Imobiliários', 'Renda Fixa', 'Cripto', 'Outros'] ### MUDANÇA ###
 
 # --- Inicialização do Session State ---
 if 'user' not in st.session_state:
@@ -44,7 +45,7 @@ def load_data(user_id):
     return pd.DataFrame(columns=['id', 'tipo', 'valor', 'descricao', 'categoria', 'data'])
 
 # =========================================================================
-# === PÁGINA 1: TELA DE LOGIN =============================================
+# === PÁGINA 1: TELA DE LOGIN (Sem mudanças) ===============================
 # =========================================================================
 def show_login_page():
     st.title("💰 Bem-vindo ao seu Planner Financeiro")
@@ -103,7 +104,7 @@ def show_main_app():
 
     # --- Carregar Dados ---
     user_id = st.session_state['user']['id']
-    df = load_data(user_id)
+    df = load_data(user_id) # Este é o DataFrame TOTAL
 
     # --- 1. HEADER E FILTROS ---
     with st.container(): # Container estilizado pelo CSS
@@ -113,6 +114,7 @@ def show_main_app():
             st.info("Nenhuma transação encontrada. Adicione sua primeira transação abaixo!")
             ano_atual = datetime.now().year
             mes_atual = datetime.now().month
+            df_filtered = df # Cria um dataframe vazio para não quebrar os KPIs mensais
         else:
             # Filtros de Mês e Ano (como no seu HTML)
             df['ano'] = df['data'].dt.year
@@ -129,47 +131,69 @@ def show_main_app():
             mes_selecionado = col_filtro2.selectbox("Mês", meses_disponiveis, index=meses_disponiveis.index(mes_atual), 
                                                      format_func=lambda x: datetime(2020, x, 1).strftime('%B'))
 
-            # Filtrar DataFrame
+            # Filtrar DataFrame para os KPIs MENSAIS e gráficos
             df_filtered = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
 
-    if df.empty:
-        df_filtered = df # Deixa o df vazio para os cálculos não quebrarem
-        
-    # --- 2. CARDS (KPIs) ---
-    receitas = df_filtered[df_filtered['tipo'] == 'receita']['valor'].sum()
-    despesas = df_filtered[df_filtered['tipo'] == 'despesa']['valor'].sum()
-    saldo = receitas - despesas
+    # --- 2. KPIs TOTAIS (Sem filtro de mês) ### MUDANÇA ### ---
+    st.subheader("Visão Geral (Total)")
+    receitas_total = df[df['tipo'] == 'receita']['valor'].sum()
+    despesas_total = df[df['tipo'] == 'despesa']['valor'].sum()
+    investimentos_total = df[df['tipo'] == 'investimento']['valor'].sum() ### MUDANÇA ###
+    saldo_total = receitas_total - despesas_total
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Receitas do Mês", f"R$ {receitas:,.2f}")
-    col2.metric("Despesas do Mês", f"R$ {despesas:,.2f}")
-    col3.metric("Saldo do Mês", f"R$ {saldo:,.2f}")
+    col1, col2, col3, col4 = st.columns(4) ### MUDANÇA ###
+    col1.metric("Receita Total", f"R$ {receitas_total:,.2f}")
+    col2.metric("Despesa Total", f"R$ {despesas_total:,.2f}")
+    col3.metric("Saldo Total", f"R$ {saldo_total:,.2f}")
+    col4.metric("Investimentos (Reserva)", f"R$ {investimentos_total:,.2f}") ### MUDANÇA ###
+
+    # --- 3. KPIs MENSAIS (Com filtro de mês) ### MUDANÇA ### ---
+    st.subheader(f"Resumo de {datetime(2020, mes_selecionado, 1).strftime('%B')}/{ano_selecionado}")
+    receitas_mes = df_filtered[df_filtered['tipo'] == 'receita']['valor'].sum()
+    despesas_mes = df_filtered[df_filtered['tipo'] == 'despesa']['valor'].sum()
+    investimentos_mes = df_filtered[df_filtered['tipo'] == 'investimento']['valor'].sum()
+    saldo_mes = receitas_mes - despesas_mes
+
+    col5, col6, col7, col8 = st.columns(4) ### MUDANÇA ###
+    col5.metric("Receita do Mês", f"R$ {receitas_mes:,.2f}")
+    col6.metric("Despesa do Mês", f"R$ {despesas_mes:,.2f}")
+    col7.metric("Saldo do Mês", f"R$ {saldo_mes:,.2f}")
+    col8.metric("Investimento do Mês", f"R$ {investimentos_mes:,.2f}") ### MUDANÇA ###
 
     st.markdown("---") # Separador visual
 
-    # --- 3. CONTEÚDO PRINCIPAL (Transações e Gráficos) ---
+    # --- 4. CONTEÚDO PRINCIPAL (Transações e Gráficos) ---
     col_main, col_sidebar = st.columns([2, 1], gap="large") # 2fr 1fr como no seu HTML
 
     with col_main:
         # --- Formulário de Adição (como no seu HTML) ---
         with st.expander("📝 Adicionar Nova Transação", expanded=df.empty):
+            
+            # ### MUDANÇA ###: Seletor de TIPO movido para FORA do form
+            # Isso força o rerun e permite que o seletor de Categoria mude dinamicamente
+            tipo = st.selectbox("Tipo", ["despesa", "receita", "investimento"], key="add_tipo_selector")
+            
             with st.form("add_form", clear_on_submit=True):
                 col_form1, col_form2 = st.columns(2)
                 with col_form1:
-                    tipo = st.selectbox("Tipo", ["despesa", "receita"], key="add_tipo")
                     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="add_valor")
-                with col_form2:
+                    
+                    # ### MUDANÇA ###: Lógica condicional para Categoria
                     if tipo == 'despesa':
                         categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
-                    else:
+                    elif tipo == 'receita':
                         categoria = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
-                    data = st.date_input("Data", datetime.today(), key="add_data")
+                    elif tipo == 'investimento':
+                        categoria = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
                 
-                descricao = st.text_input("Descrição", placeholder="Ex: Salário, Aluguel, Compras...", key="add_desc")
+                with col_form2:
+                    data = st.date_input("Data", datetime.today(), key="add_data")
+                    descricao = st.text_input("Descrição", placeholder="Ex: Salário, Aluguel, Ações...", key="add_desc")
                 
                 submitted_add = st.form_submit_button("Adicionar Transação")
 
                 if submitted_add:
+                    # 'tipo' já está definido (foi pego fora do form)
                     response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, data)
                     if response:
                         st.success("Transação adicionada!")
@@ -180,7 +204,7 @@ def show_main_app():
 
         # --- Histórico de Transações (como no seu HTML) ---
         with st.container(border=True):
-            st.subheader("📊 Histórico de Transações")
+            st.subheader(f"📊 Histórico de Transações de {datetime(2020, mes_selecionado, 1).strftime('%B')}")
             if df_filtered.empty:
                 st.info("Nenhuma transação para este mês.")
             else:
@@ -205,21 +229,22 @@ def show_main_app():
             else:
                 st.info("Nenhuma despesa registrada no período.")
         
-        # --- Gráfico de Balanço (Bônus, o seu HTML tinha um) ---
+        # --- ### MUDANÇA ###: Novo Gráfico de Investimentos ---
         with st.container(border=True):
-            st.subheader("📈 Balanço (Receita vs. Despesa)")
-            df_balanco = pd.DataFrame([
-                {"Tipo": "Receitas", "Valor": receitas},
-                {"Tipo": "Despesas", "Valor": despesas}
-            ])
-            fig_bar = px.bar(df_balanco, x="Tipo", y="Valor", color="Tipo",
-                             color_discrete_map={'Receitas': '#10b981', 'Despesas': '#ef4444'},
-                             text_auto='.2s')
-            fig_bar.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.subheader("📈 Investimentos por Categoria")
+            df_investimentos = df_filtered[df_filtered['tipo'] == 'investimento']
+            if not df_investimentos.empty:
+                fig_pie_inv = px.pie(df_investimentos, 
+                                 names='categoria', 
+                                 values='valor', 
+                                 hole=.3)
+                fig_pie_inv.update_layout(legend_title_text='Categorias', margin=dict(t=0, b=0, l=0, r=0))
+                st.plotly_chart(fig_pie_inv, use_container_width=True)
+            else:
+                st.info("Nenhum investimento registrado no período.")
 
 # =========================================================================
-# === LÓGICA PRINCIPAL: Decide qual página mostrar ========================
+# === LÓGICA PRINCIPAL: Decide qual página mostrar (Sem mudanças) =========
 # =========================================================================
 if st.session_state['user'] is None:
     # Se não está logado, mostra a página de login
