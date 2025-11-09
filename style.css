@@ -1,0 +1,97 @@
+/* style.css (CORRIGIDO PARA TEMA ESCURO) */
+
+/* Fundo gradiente do app */
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Remove o padding padrão do Streamlit */
+.main .block-container {
+    padding: 20px;
+}
+
+/* Container do Header (Título e Filtros) */
+/* Este é o primeiro container na página */
+[data-testid="stVerticalBlock"] > [data-testid="stContainer"]:first-of-type > div {
+    background: #1A1D24; /* <<<< MUDOU DE 'white' */
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+/* Título H1 */
+h1 {
+    color: #667eea;
+}
+
+/* Cards de Métrica (KPIs) - Receita, Despesa, Saldo */
+[data-testid="stMetric"] {
+    background: #1A1D24; /* <<<< MUDOU DE 'white' */
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-5px);
+}
+
+/* Título dos cards (Receita, Despesa...) */
+[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+    font-size: 14px;
+    color: #FAFAFA; /* <<<< MUDOU DE '#666' */
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Valores dos cards */
+[data-testid="stMetric"] .st-metric-value {
+    font-size: 32px;
+    font-weight: bold;
+}
+
+/* Cores dos valores (já estavam ok) */
+[data-testid="stMetric"][label*="Receita"] .st-metric-value { color: #10b981; }
+[data-testid="stMetric"][label*="Despesa"] .st-metric-value { color: #ef4444; }
+[data-testid="stMetric"][label*="Saldo"] .st-metric-value   { color: #667eea; }
+
+/* "Seções" - Onde colocamos os gráficos e o histórico */
+[data-testid="stDecoratedContainer"] {
+    background: #1A1D24; /* <<<< MUDOU DE 'white' */
+    border-radius: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    border: none;
+    padding: 25px;
+}
+
+/* "Seção" de Adicionar Transação (o Expander) */
+[data-testid="stExpander"] {
+    background: #1A1D24; /* <<<< MUDOU DE 'white' */
+    border-radius: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    border: none;
+}
+[data-testid="stExpander"] summary {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* Formulário DENTRO do expander */
+[data-testid="stExpander"] [data-testid="stForm"] {
+    background: #0E1117; /* <<<< MUDOU DE '#f8f9fa' (um cinza claro) */
+    border-radius: 10px;
+    padding: 20px;
+}
+
+/* Botão de Adicionar */
+[data-testid="stForm"] button {
+    background: #667eea;
+    color: white;
+    font-weight: 600;
+    transition: background 0.3s ease;
+}
+[data-testid="stForm"] button:hover {
+    background: #5568d3;
+    color: white; /* Precisa re-declarar no hover */
+}
