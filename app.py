@@ -163,65 +163,17 @@ def show_main_app():
     col6.metric("Despesa do Mês", f"R$ {despesas_mes:,.2f}")
     col7.metric("Saldo do Mês", f"R$ {saldo_mes:,.2f}")
     col8.metric("Investimento do Mês", f"R$ {investimentos_mes:,.2f}")
-
+    
     st.markdown("---") # Separador visual
 
-    # --- 4. CONTEÚDO PRINCIPAL (Transações e Gráficos) ---
-    col_main, col_sidebar = st.columns([2, 1], gap="large") # 2fr 1fr como no seu HTML
+    # --- 4. LAYOUT PRINCIPAL (Gráficos) ---
+    col_charts_left, col_charts_right = st.columns([2, 1], gap="large") # 2fr 1fr
 
-    with col_main:
-        # --- Formulário de Adição (como no seu HTML) ---
-        with st.expander("📝 Adicionar Nova Transação", expanded=df.empty):
-            
-            # Seletor de TIPO movido para FORA do form para atualização dinâmica
-            tipo = st.selectbox("Tipo", ["despesa", "receita", "investimento"], key="add_tipo_selector")
-            
-            with st.form("add_form", clear_on_submit=True):
-                col_form1, col_form2 = st.columns(2)
-                with col_form1:
-                    valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="add_valor")
-                    
-                    # Lógica condicional para Categoria
-                    if tipo == 'despesa':
-                        categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
-                    elif tipo == 'receita':
-                        categoria = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
-                    elif tipo == 'investimento':
-                        categoria = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
-                
-                with col_form2:
-                    data = st.date_input("Data", datetime.today(), key="add_data")
-                    descricao = st.text_input("Descrição", placeholder="Ex: Salário, Aluguel, Ações...", key="add_desc")
-                
-                submitted_add = st.form_submit_button("Adicionar Transação")
-
-                if submitted_add:
-                    # 'tipo' já está definido (foi pego fora do form)
-                    response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, data)
-                    if response:
-                        st.success("Transação adicionada!")
-                        st.cache_data.clear() # Limpa o cache para recarregar os dados
-                        st.rerun()
-                    else:
-                        st.error("Falha ao adicionar transação.")
-
-        # --- Histórico de Transações (Obedece o filtro de mês) ---
-        with st.container(border=True):
-            st.subheader(f"📊 Histórico de Transações de {datetime(2020, mes_selecionado, 1).strftime('%B')}")
-            if df_filtered.empty:
-                st.info("Nenhuma transação para este mês.")
-            else:
-                st.dataframe(
-                    df_filtered[['data', 'descricao', 'categoria', 'tipo', 'valor']],
-                    use_container_width=True,
-                    hide_index=True
-                )
-        
-        # --- 5. GRÁFICO DE TENDÊNCIA (IGNORA FILTROS e mostra TUDO) ---
+    with col_charts_left:
+        # --- GRÁFICO DE TENDÊNCIA (IGNORA FILTROS e mostra TUDO) ---
         with st.container(border=True):
             st.subheader(f"📈 Tendência Acumulada (Toda a História)")
             
-            # USA O 'df' TOTAL, IGNORANDO OS FILTROS 'ano_selecionado' e 'mes_selecionado'
             if df.empty:
                 st.info(f"Sem dados de transação para mostrar a tendência.")
             else:
@@ -241,8 +193,7 @@ def show_main_app():
                 # 2. Calcula o saldo MENSAL
                 df_timeline['saldo_mensal'] = df_timeline['receita'] - df_timeline['despesa']
                 
-                # 3. Calcula o Saldo ACUMULADO VITALÍCIO (a mágica do .cumsum())
-                # Como o df está ordenado por (ano, mes), isso funciona perfeitamente
+                # 3. Calcula o Saldo ACUMULADO VITALÍCIO
                 df_timeline['saldo_acumulado_total'] = df_timeline['saldo_mensal'].cumsum()
                 
                 # 4. Cria os labels do eixo X (ex: "Nov/25", "Dez/25", "Jan/26")
@@ -253,7 +204,8 @@ def show_main_app():
                 # --- 5. Cria o Gráfico Combinado ---
                 fig_timeline = go.Figure()
 
-                # Barras de Receita
+                # --- 3 BARRAS + 1 LINHA ---
+                # Barra de Receita
                 fig_timeline.add_trace(go.Bar(
                     x=labels_x,
                     y=df_timeline['receita'],
@@ -261,12 +213,20 @@ def show_main_app():
                     marker_color='#10b981'
                 ))
                 
-                # Barras de Despesa
+                # Barra de Despesa
                 fig_timeline.add_trace(go.Bar(
                     x=labels_x,
                     y=df_timeline['despesa'],
                     name='Despesa (Mês)',
                     marker_color='#ef4444'
+                ))
+                
+                # Barra de Investimento
+                fig_timeline.add_trace(go.Bar(
+                    x=labels_x,
+                    y=df_timeline['investimento'],
+                    name='Investimento (Mês)',
+                    marker_color='#FFC300' # Amarelo/Ouro
                 ))
                 
                 # Linha de Saldo ACUMULADO TOTAL
@@ -292,18 +252,20 @@ def show_main_app():
                 
                 st.plotly_chart(fig_timeline, use_container_width=True)
 
-
-    with col_sidebar:
-        # --- Gráficos de Pizza (Obedecem o filtro de mês) ---
+    with col_charts_right:
+        # --- Gráfico de Despesas (Filtrado por Mês) ---
         with st.container(border=True):
             st.subheader(f"🏷️ Despesas de {datetime(2020, mes_selecionado, 1).strftime('%B')}")
-            df_despesas = df_filtered[df_filtered['tipo'] == 'despesa']
+            df_despesas = df_filtered[df_filtered['tipo'] == 'despesa'] # Usa df_filtered
             if not df_despesas.empty:
                 fig_pie = px.pie(df_despesas, 
                                  names='categoria', 
                                  values='valor', 
                                  hole=.3) # Gráfico de rosca
+                
+                # --- Adicionado height=300 ---
                 fig_pie.update_layout(
+                    height=150, # Define a altura fixa
                     legend_title_text='Categorias', 
                     margin=dict(t=0, b=0, l=0, r=0),
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -314,16 +276,19 @@ def show_main_app():
             else:
                 st.info("Nenhuma despesa registrada no período.")
         
-        # --- Novo Gráfico de Investimentos ---
+        # --- Gráfico de Investimentos (Geral / Total) ---
         with st.container(border=True):
-            st.subheader(f"📈 Investimentos de {datetime(2020, mes_selecionado, 1).strftime('%B')}")
-            df_investimentos = df_filtered[df_filtered['tipo'] == 'investimento']
+            st.subheader(f"📈 Investimentos (Geral)")
+            df_investimentos = df[df['tipo'] == 'investimento'] # Usa df (total)
             if not df_investimentos.empty:
                 fig_pie_inv = px.pie(df_investimentos, 
                                  names='categoria', 
                                  values='valor', 
                                  hole=.3)
+                
+                # --- Adicionado height=300 ---
                 fig_pie_inv.update_layout(
+                    height=150, # Define a altura fixa
                     legend_title_text='Categorias', 
                     margin=dict(t=0, b=0, l=0, r=0),
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -332,8 +297,60 @@ def show_main_app():
                 )
                 st.plotly_chart(fig_pie_inv, use_container_width=True)
             else:
-                st.info("Nenhum investimento registrado no período.")
+                st.info("Nenhum investimento registrado (Geral).")
 
+                
+    st.markdown("---") # Separador visual
+
+    # --- 5. CONTEÚDO SECUNDÁRIO (Formulário e Histórico) ---
+    
+    # --- MUDANÇA: Removido o col_history ---
+    # --- Formulário de Adição ---
+    with st.expander("📝 Adicionar Nova Transação", expanded=df.empty): # 'expanded' é True só se for a primeira vez
+        
+        # Seletor de TIPO movido para FORA do form para atualização dinâmica
+        tipo = st.selectbox("Tipo", ["despesa", "receita", "investimento"], key="add_tipo_selector")
+        
+        with st.form("add_form", clear_on_submit=True):
+            col_form1, col_form2 = st.columns(2)
+            with col_form1:
+                valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="add_valor")
+                
+                # Lógica condicional para Categoria
+                if tipo == 'despesa':
+                    categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
+                elif tipo == 'receita':
+                    categoria = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
+                elif tipo == 'investimento':
+                    categoria = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
+            
+            with col_form2:
+                data = st.date_input("Data", datetime.today(), key="add_data")
+                descricao = st.text_input("Descrição", placeholder="Ex: Salário, Aluguel, Ações...", key="add_desc")
+            
+            submitted_add = st.form_submit_button("Adicionar Transação")
+
+            if submitted_add:
+                # 'tipo' já está definido (foi pego fora do form)
+                response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, data)
+                if response:
+                    st.success("Transação adicionada!")
+                    st.cache_data.clear() # Limpa o cache para recarregar os dados
+                    st.rerun()
+                else:
+                    st.error("Falha ao adicionar transação.")
+
+    # --- Histórico de Transações (Obedece o filtro de mês) ---
+    with st.expander(f"📊 Histórico de Transações de {datetime(2020, mes_selecionado, 1).strftime('%B')}"):
+        if df_filtered.empty:
+            st.info("Nenhuma transação para este mês.")
+        else:
+            st.dataframe(
+                df_filtered[['data', 'descricao', 'categoria', 'tipo', 'valor']],
+                use_container_width=True,
+                hide_index=True
+            )
+  
 # =========================================================================
 # === LÓGICA PRINCIPAL: Decide qual página mostrar (Sem mudanças) =========
 # =========================================================================
