@@ -29,6 +29,15 @@ CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde
 CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Outros']
 CATEGORIAS_INVESTIMENTO = ['Ações', 'Fundos Imobiliários', 'Renda Fixa', 'Cripto', 'Outros']
 
+# --- MUDANÇA: Mapeamento de Meses para Português ---
+MESES_PORTUGUES = {
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
+# ----------------------------------------------------
+
+
 # --- Inicialização do Session State ---
 if 'user' not in st.session_state:
     st.session_state['user'] = None
@@ -132,8 +141,10 @@ def show_main_app():
 
             col_filtro1, col_filtro2 = st.columns(2)
             ano_selecionado = col_filtro1.selectbox("Ano", anos_disponiveis, index=anos_disponiveis.index(ano_atual))
+            
+            # --- MUDANÇA AQUI ---
             mes_selecionado = col_filtro2.selectbox("Mês", meses_disponiveis, index=meses_disponiveis.index(mes_atual), 
-                                                     format_func=lambda x: datetime(2020, x, 1).strftime('%B'))
+                                                     format_func=lambda x: MESES_PORTUGUES.get(x, x))
 
             # Filtrar DataFrame para os KPIs MENSAIS e gráficos
             df_filtered = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
@@ -152,7 +163,8 @@ def show_main_app():
     col4.metric("Investimentos (Reserva)", f"R$ {investimentos_total:,.2f}")
 
     # --- 3. KPIs MENSAIS (Com filtro de mês) ---
-    st.subheader(f"Resumo de {datetime(2020, mes_selecionado, 1).strftime('%B')}/{ano_selecionado}")
+    # --- MUDANÇA AQUI ---
+    st.subheader(f"Resumo de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}/{ano_selecionado}")
     receitas_mes = df_filtered[df_filtered['tipo'] == 'receita']['valor'].sum()
     despesas_mes = df_filtered[df_filtered['tipo'] == 'despesa']['valor'].sum()
     investimentos_mes = df_filtered[df_filtered['tipo'] == 'investimento']['valor'].sum()
@@ -196,10 +208,14 @@ def show_main_app():
                 # 3. Calcula o Saldo ACUMULADO VITALÍCIO
                 df_timeline['saldo_acumulado_total'] = df_timeline['saldo_mensal'].cumsum()
                 
+                # --- MUDANÇA AQUI ---
                 # 4. Cria os labels do eixo X (ex: "Nov/25", "Dez/25", "Jan/26")
                 labels_x = []
                 for ano, mes in df_timeline.index:
-                    labels_x.append(datetime(year=int(ano), month=int(mes), day=1).strftime('%b/%y'))
+                    nome_mes_abrev = MESES_PORTUGUES.get(int(mes), str(mes))[:3] # Pega os 3 primeiros caracteres
+                    ano_abrev = str(ano)[2:] # Pega os 2 últimos dígitos
+                    labels_x.append(f"{nome_mes_abrev}/{ano_abrev}")
+
 
                 # --- 5. Cria o Gráfico Combinado ---
                 fig_timeline = go.Figure()
@@ -255,7 +271,8 @@ def show_main_app():
     with col_charts_right:
         # --- Gráfico de Despesas (Filtrado por Mês) ---
         with st.container(border=True):
-            st.subheader(f"🏷️ Despesas de {datetime(2020, mes_selecionado, 1).strftime('%B')}")
+            # --- MUDANÇA AQUI ---
+            st.subheader(f"🏷️ Despesas de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}")
             df_despesas = df_filtered[df_filtered['tipo'] == 'despesa'] # Usa df_filtered
             if not df_despesas.empty:
                 fig_pie = px.pie(df_despesas, 
@@ -263,7 +280,7 @@ def show_main_app():
                                  values='valor', 
                                  hole=.3) # Gráfico de rosca
                 
-                # --- Adicionado height=300 ---
+                # --- Adicionado height=150 (como no seu código) ---
                 fig_pie.update_layout(
                     height=150, # Define a altura fixa
                     legend_title_text='Categorias', 
@@ -286,7 +303,7 @@ def show_main_app():
                                  values='valor', 
                                  hole=.3)
                 
-                # --- Adicionado height=300 ---
+                # --- Adicionado height=150 (como no seu código) ---
                 fig_pie_inv.update_layout(
                     height=150, # Define a altura fixa
                     legend_title_text='Categorias', 
@@ -304,7 +321,6 @@ def show_main_app():
 
     # --- 5. CONTEÚDO SECUNDÁRIO (Formulário e Histórico) ---
     
-    # --- MUDANÇA: Removido o col_history ---
     # --- Formulário de Adição ---
     with st.expander("📝 Adicionar Nova Transação", expanded=df.empty): # 'expanded' é True só se for a primeira vez
         
@@ -341,7 +357,8 @@ def show_main_app():
                     st.error("Falha ao adicionar transação.")
 
     # --- Histórico de Transações (Obedece o filtro de mês) ---
-    with st.expander(f"📊 Histórico de Transações de {datetime(2020, mes_selecionado, 1).strftime('%B')}"):
+    # --- MUDANÇA AQUI ---
+    with st.expander(f"📊 Histórico de Transações de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}"):
         if df_filtered.empty:
             st.info("Nenhuma transação para este mês.")
         else:
@@ -350,7 +367,7 @@ def show_main_app():
                 use_container_width=True,
                 hide_index=True
             )
-  
+ 
 # =========================================================================
 # === LÓGICA PRINCIPAL: Decide qual página mostrar (Sem mudanças) =========
 # =========================================================================
