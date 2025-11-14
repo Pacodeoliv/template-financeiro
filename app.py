@@ -25,8 +25,11 @@ def load_css(file_name):
 load_css("style.css")
 
 # --- Categorias (Atualizadas) ---
-CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros']
-CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Outros']
+CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros', 'Impostos', 'Cartão de Crédito', 'Empréstimo']
+#colocar um jeito de por compras no cartao em quantas parcelas e o dia fixo de pagamento do cartao de credito e emprestimo. 
+#por opcao de compra no cartao de credito e emprestimo.
+#por opção de deletar objetos na tabela de transacoes.
+CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Outros', 'Investimentos', 'Vendas']
 CATEGORIAS_INVESTIMENTO = ['Ações', 'Fundos Imobiliários', 'Renda Fixa', 'Cripto', 'Outros']
 
 # --- MUDANÇA: Mapeamento de Meses para Português ---
