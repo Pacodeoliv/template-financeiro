@@ -25,7 +25,7 @@ def load_css(file_name):
 load_css("style.css")
 
 # --- Categorias (Atualizadas) ---
-CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros', 'Impostos', 'Cartão de Crédito', 'Empréstimo']
+CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros', 'Impostos', 'Cartão de Crédito', 'Empréstimo','Despesas fixas']
 #colocar um jeito de por compras no cartao em quantas parcelas e o dia fixo de pagamento do cartao de credito e emprestimo. 
 #por opcao de compra no cartao de credito e emprestimo.
 #por opção de deletar objetos na tabela de transacoes.
@@ -136,8 +136,8 @@ def show_main_app():
             df['ano'] = df['data'].dt.year
             df['mes'] = df['data'].dt.month
             
-            # Ordena os dados pela data para garantir que o .cumsum() funcione
-            df = df.sort_values(by=['ano', 'mes'])
+            # --- MUDANÇA: Ordena por DATA (não por ano/mes) ---
+            df = df.sort_values(by='data')
             
             anos_disponiveis = sorted(df['ano'].unique(), reverse=True)
             meses_disponiveis = sorted(df['mes'].unique())
@@ -188,16 +188,16 @@ def show_main_app():
     col_charts_left, col_charts_right = st.columns([2, 1], gap="large") # 2fr 1fr
 
     with col_charts_left:
-        # --- GRÁFICO DE TENDÊNCIA (IGNORA FILTROS e mostra TUDO) ---
+        # --- GRÁFICO DE TENDÊNCIA (MUDANÇA: AGORA É POR DIA) ---
         with st.container(border=True):
             st.subheader(f"📈 Tendência Acumulada (Toda a História)")
             
             if df.empty:
                 st.info(f"Sem dados de transação para mostrar a tendência.")
             else:
-                # 1. Agrupa por ANO e MÊS
+                # 1. Agrupa por DATA (dia)
                 df_timeline = df.pivot_table(
-                    index=['ano', 'mes'],
+                    index='data', # <<< MUDANÇA: Agrupa por 'data'
                     columns='tipo',
                     values='valor',
                     aggfunc='sum'
@@ -208,52 +208,46 @@ def show_main_app():
                     if col not in df_timeline:
                         df_timeline[col] = 0
                         
-                # 2. Calcula o saldo MENSAL
-                df_timeline['saldo_mensal'] = df_timeline['receita'] - df_timeline['despesa']
+                # 2. Calcula o saldo DIÁRIO
+                df_timeline['saldo_diario'] = df_timeline['receita'] - df_timeline['despesa']
                 
                 # 3. Calcula o Saldo ACUMULADO VITALÍCIO
-                df_timeline['saldo_acumulado_total'] = df_timeline['saldo_mensal'].cumsum()
+                df_timeline['saldo_acumulado_total'] = df_timeline['saldo_diario'].cumsum()
                 
-                # --- MUDANÇA (Tradução) ---
-                # 4. Cria os labels do eixo X (ex: "Nov/25", "Dez/25", "Jan/26")
-                labels_x = []
-                for ano, mes in df_timeline.index:
-                    nome_mes_abrev = MESES_PORTUGUES.get(int(mes), str(mes))[:3] # Pega os 3 primeiros caracteres
-                    ano_abrev = str(ano)[2:] # Pega os 2 últimos dígitos
-                    labels_x.append(f"{nome_mes_abrev}/{ano_abrev}")
-
-
+                # 4. O Eixo X agora é o próprio index (as datas)
+                # Não precisamos criar 'labels_x'
+                
                 # --- 5. Cria o Gráfico Combinado ---
                 fig_timeline = go.Figure()
 
                 # --- 3 BARRAS + 1 LINHA ---
                 # Barra de Receita
                 fig_timeline.add_trace(go.Bar(
-                    x=labels_x,
+                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
                     y=df_timeline['receita'],
-                    name='Receita (Mês)',
+                    name='Receita (Dia)',
                     marker_color='#10b981'
                 ))
                 
                 # Barra de Despesa
                 fig_timeline.add_trace(go.Bar(
-                    x=labels_x,
+                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
                     y=df_timeline['despesa'],
-                    name='Despesa (Mês)',
+                    name='Despesa (Dia)',
                     marker_color='#ef4444'
                 ))
                 
                 # Barra de Investimento
                 fig_timeline.add_trace(go.Bar(
-                    x=labels_x,
+                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
                     y=df_timeline['investimento'],
-                    name='Investimento (Mês)',
+                    name='Investimento (Dia)',
                     marker_color='#FFC300' # Amarelo/Ouro
                 ))
                 
                 # Linha de Saldo ACUMULADO TOTAL
                 fig_timeline.add_trace(go.Scatter(
-                    x=labels_x,
+                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
                     y=df_timeline['saldo_acumulado_total'], 
                     name='Saldo Acumulado (Vitalício)',
                     mode='lines+markers',
@@ -264,7 +258,7 @@ def show_main_app():
                 fig_timeline.update_layout(
                     barmode='group',  # Agrupa as barras
                     title=f"Fluxo de Caixa vs. Saldo Acumulado (Toda a História)",
-                    xaxis_title="Mês/Ano",
+                    xaxis_title="Data", # <<< MUDANÇA
                     yaxis_title="Valor (R$)",
                     legend_title="Métricas",
                     plot_bgcolor='#0E1117', # Fundo do gráfico
