@@ -18,12 +18,9 @@ def init_connection() -> Client:
 
 supabase_client = init_connection()
 
-# --- Funções de Autenticação ---
+# --- Funções de Autenticação (Sem mudanças) ---
 
 def sign_up(email, password):
-    """
-    Registra um novo usuário.
-    """
     try:
         res = supabase_client.auth.sign_up({
             "email": email,
@@ -34,9 +31,6 @@ def sign_up(email, password):
         return {"error": str(e)}
 
 def sign_in(email, password):
-    """
-    Autentica um usuário existente.
-    """
     try:
         res = supabase_client.auth.sign_in_with_password({
             "email": email,
@@ -47,9 +41,6 @@ def sign_in(email, password):
         return {"error": str(e)}
 
 def sign_out():
-    """
-    Desloga o usuário.
-    """
     try:
         res = supabase_client.auth.sign_out()
         return res
@@ -57,9 +48,6 @@ def sign_out():
         return {"error": str(e)}
 
 def get_user_session():
-    """
-    Verifica se existe uma sessão de usuário ativa.
-    """
     try:
         session = supabase_client.auth.get_session()
         return session
@@ -83,42 +71,42 @@ def get_transactions(user_id):
         st.error(f"Erro ao buscar transações: {e}")
         return []
 
-def add_transaction(user_id, tipo, valor, descricao, categoria, data):
+def add_transaction(user_id, tipo, valor, descricao, categoria, data, card_id=None, installment_group_id=None):
     """
-    Adiciona uma nova transação.
+    Adiciona uma ÚNICA nova transação.
     """
     try:
-        response = supabase_client.table('transactions').insert({
+        transaction_data = {
             'user_id': user_id,
             'tipo': tipo,
             'valor': valor,
             'descricao': descricao,
             'categoria': categoria,
-            'data': str(data) # Converte data para string no formato YYYY-MM-DD
-        }).execute()
+            'data': str(data),
+            'card_id': card_id,
+            'installment_group_id': installment_group_id
+        }
+        response = supabase_client.table('transactions').insert(transaction_data).execute()
         return response.data
     except Exception as e:
         st.error(f"Erro ao adicionar transação: {e}")
         return None
 
-def update_transaction(transaction_id, user_id, updates):
+def add_batch_transactions(transactions_list):
     """
-    Atualiza uma transação existente.
-    'updates' é um dicionário com os campos a atualizar.
+    Adiciona uma lista de transações (parcelas) de uma vez.
+    'transactions_list' é uma lista de dicts.
     """
     try:
-        response = supabase_client.table('transactions') \
-                                  .update(updates) \
-                                  .match({'id': transaction_id, 'user_id': user_id}) \
-                                  .execute()
+        response = supabase_client.table('transactions').insert(transactions_list).execute()
         return response.data
     except Exception as e:
-        st.error(f"Erro ao atualizar transação: {e}")
+        st.error(f"Erro ao adicionar lote de transações: {e}")
         return None
 
 def delete_transaction(transaction_id, user_id):
     """
-    Deleta uma transação.
+    Deleta uma transação específica do usuário.
     """
     try:
         response = supabase_client.table('transactions') \
@@ -128,4 +116,41 @@ def delete_transaction(transaction_id, user_id):
         return response.data
     except Exception as e:
         st.error(f"Erro ao deletar transação: {e}")
+        return None
+
+
+# --- Funções CRUD (Credit Cards) ---
+
+@st.cache_data(ttl=300) # Cache de 5 minutos
+def get_credit_cards(user_id):
+    """
+    Busca todos os cartões de crédito de um usuário.
+    """
+    try:
+        response = supabase_client.table('credit_cards') \
+                                  .select('*') \
+                                  .eq('user_id', user_id) \
+                                  .order('nome_cartao', desc=False) \
+                                  .execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Erro ao buscar cartões: {e}")
+        return []
+
+# --- MUDANÇA AQUI ---
+def add_credit_card(user_id, nome_cartao, limite, dia_vencimento, dia_fechamento):
+    """
+    Adiciona um novo cartão de crédito.
+    """
+    try:
+        response = supabase_client.table('credit_cards').insert({
+            'user_id': user_id,
+            'nome_cartao': nome_cartao,
+            'limite': limite,
+            'dia_vencimento': dia_vencimento,
+            'dia_fechamento': dia_fechamento # <--- NOVO CAMPO
+        }).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Erro ao adicionar cartão: {e}")
         return None

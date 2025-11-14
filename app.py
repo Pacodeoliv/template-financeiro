@@ -6,6 +6,8 @@ import plotly.express as px
 import plotly.graph_objects as go  # Importação necessária para o gráfico combinado
 from datetime import datetime
 import time
+import uuid # Para agrupar parcelas
+from dateutil.relativedelta import relativedelta # Para calcular datas futuras
 
 # --- Configuração da Página e CSS ---
 st.set_page_config(
@@ -24,15 +26,13 @@ def load_css(file_name):
 
 load_css("style.css")
 
-# --- Categorias (Atualizadas) ---
+# --- Categorias (Atualizadas com as suas) ---
 CATEGORIAS_DESPESA = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Outros', 'Impostos', 'Cartão de Crédito', 'Empréstimo','Despesas fixas']
-#colocar um jeito de por compras no cartao em quantas parcelas e o dia fixo de pagamento do cartao de credito e emprestimo. 
-#por opcao de compra no cartao de credito e emprestimo.
-#por opção de deletar objetos na tabela de transacoes.
 CATEGORIAS_RECEITA = ['Salário', 'Freelance', 'Outros', 'Investimentos', 'Vendas']
 CATEGORIAS_INVESTIMENTO = ['Ações', 'Fundos Imobiliários', 'Renda Fixa', 'Cripto', 'Outros']
 
-# --- MUDANÇA: Mapeamento de Meses para Português ---
+
+# --- Mapeamento de Meses para Português ---
 MESES_PORTUGUES = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 
     5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
@@ -56,6 +56,31 @@ def load_data(user_id):
         df['data'] = pd.to_datetime(df['data'])
         return df
     return pd.DataFrame(columns=['id', 'tipo', 'valor', 'descricao', 'categoria', 'data'])
+
+# --- Função Helper para calcular vencimentos ---
+def calcular_data_vencimento(data_compra, dia_vencimento, dia_fechamento, parcela_index):
+    """
+    Calcula a data de vencimento da fatura para uma parcela,
+    baseado no dia de fechamento real.
+    """
+    data_vencimento_base = data_compra.replace(day=dia_vencimento)
+    
+    # Se o dia de vencimento for MENOR que o dia de fechamento (ex: Vence 10, Fecha 28)
+    # A fatura que fecha este mês (Nov) vence no próximo mês (Dez).
+    if dia_vencimento < dia_fechamento:
+        data_vencimento_base += relativedelta(months=1)
+    
+    # Se a compra foi ANTES ou NO DIA do fechamento
+    if data_compra.day <= dia_fechamento:
+        primeira_fatura = data_vencimento_base
+    else:
+        # A compra foi DEPOIS do fechamento, joga para a próxima fatura
+        primeira_fatura = data_vencimento_base + relativedelta(months=1)
+        
+    # Adiciona os meses das parcelas
+    fatura_final = primeira_fatura + relativedelta(months=parcela_index - 1)
+    return fatura_final
+
 
 # =========================================================================
 # === PÁGINA 1: TELA DE LOGIN (Sem mudanças) ===============================
@@ -118,6 +143,12 @@ def show_main_app():
     # --- Carregar Dados ---
     user_id = st.session_state['user']['id']
     df = load_data(user_id) # Este é o DataFrame TOTAL
+    
+    # --- NOVO: Carregar Cartões ---
+    cards_list = sc.get_credit_cards(user_id)
+    # Cria um dict para facilitar a busca: {'Nome do Cartão': {'id': 1, 'dia_vencimento': 10, 'dia_fechamento': 1}}
+    cards_dict = {card['nome_cartao']: card for card in cards_list}
+
 
     # --- 1. HEADER E FILTROS ---
     with st.container(): # Container estilizado pelo CSS
@@ -215,7 +246,6 @@ def show_main_app():
                 df_timeline['saldo_acumulado_total'] = df_timeline['saldo_diario'].cumsum()
                 
                 # 4. O Eixo X agora é o próprio index (as datas)
-                # Não precisamos criar 'labels_x'
                 
                 # --- 5. Cria o Gráfico Combinado ---
                 fig_timeline = go.Figure()
@@ -223,7 +253,7 @@ def show_main_app():
                 # --- 3 BARRAS + 1 LINHA ---
                 # Barra de Receita
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
+                    x=df_timeline.index, # <<< MUDANÇA
                     y=df_timeline['receita'],
                     name='Receita (Dia)',
                     marker_color='#10b981'
@@ -231,7 +261,7 @@ def show_main_app():
                 
                 # Barra de Despesa
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
+                    x=df_timeline.index, # <<< MUDANÇA
                     y=df_timeline['despesa'],
                     name='Despesa (Dia)',
                     marker_color='#ef4444'
@@ -239,7 +269,7 @@ def show_main_app():
                 
                 # Barra de Investimento
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
+                    x=df_timeline.index, # <<< MUDANÇA
                     y=df_timeline['investimento'],
                     name='Investimento (Dia)',
                     marker_color='#FFC300' # Amarelo/Ouro
@@ -247,7 +277,7 @@ def show_main_app():
                 
                 # Linha de Saldo ACUMULADO TOTAL
                 fig_timeline.add_trace(go.Scatter(
-                    x=df_timeline.index, # <<< MUDANÇA: Usa o index (datas)
+                    x=df_timeline.index, # <<< MUDANÇA
                     y=df_timeline['saldo_acumulado_total'], 
                     name='Saldo Acumulado (Vitalício)',
                     mode='lines+markers',
@@ -273,7 +303,7 @@ def show_main_app():
         with st.container(border=True):
             # --- MUDANÇA (Tradução) ---
             st.subheader(f"🏷️ Despesas de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}")
-            df_despesas = df_filtered[df_filtered['tipo'] == 'despesa'] # Usa df_filtered
+            df_despesas = df_filtered[df_filtered['tipo'] == 'despesa'] if not df_filtered.empty else pd.DataFrame()
             if not df_despesas.empty:
                 fig_pie = px.pie(df_despesas, 
                                  names='categoria', 
@@ -296,7 +326,7 @@ def show_main_app():
         # --- Gráfico de Investimentos (Geral / Total) ---
         with st.container(border=True):
             st.subheader(f"📈 Investimentos (Geral)")
-            df_investimentos = df[df['tipo'] == 'investimento'] # Usa df (total)
+            df_investimentos = df[df['tipo'] == 'investimento'] if not df.empty else pd.DataFrame()
             if not df_investimentos.empty:
                 fig_pie_inv = px.pie(df_investimentos, 
                                  names='categoria', 
@@ -321,53 +351,239 @@ def show_main_app():
 
     # --- 5. CONTEÚDO SECUNDÁRIO (Formulário e Histórico) ---
     
-    # --- Formulário de Adição ---
-    with st.expander("📝 Adicionar Nova Transação", expanded=df.empty): # 'expanded' é True só se for a primeira vez
+    # --- Formulário de Adição (COM LÓGICA DE CARTÃO) ---
+    with st.expander("📝 Adicionar Nova Transação", expanded=df.empty):
         
-        # Seletor de TIPO movido para FORA do form para atualização dinâmica
         tipo = st.selectbox("Tipo", ["despesa", "receita", "investimento"], key="add_tipo_selector")
         
+        # --- MUDANÇA: Lógica de Pagamento com Empréstimo ---
+        meio_pagamento = "avista" # Padrão
+        if tipo == 'despesa':
+            meio_pagamento = st.radio("Meio de Pagamento", ["À Vista (Dinheiro/Débito)", "Cartão de Crédito", "Empréstimo"], key="payment_method", horizontal=True)
+
         with st.form("add_form", clear_on_submit=True):
             col_form1, col_form2 = st.columns(2)
+            
             with col_form1:
-                valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f", key="add_valor")
+                # --- MUDANÇA: Label do valor muda ---
+                valor_label = "Valor (R$)"
+                if tipo == 'despesa' and meio_pagamento == "Cartão de Crédito":
+                    valor_label = "Valor da Parcela (R$)"
+                elif tipo == 'despesa' and meio_pagamento == "Empréstimo":
+                    valor_label = "Valor da Parcela (R$)"
                 
-                # Lógica condicional para Categoria
+                valor = st.number_input(valor_label, min_value=0.01, format="%.2f", key="add_valor")
+                
+                # --- MUDANÇA: Lógica de Categoria e Parcelas ---
+                cartao_selecionado_nome = None
+                num_parcelas = 1
+                
                 if tipo == 'despesa':
-                    categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
+                    if meio_pagamento == "À Vista":
+                        categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
+                    
+                    elif meio_pagamento == "Cartão de Crédito":
+                        categoria = "Cartão de Crédito" # Força a categoria
+                        st.write(f"Categoria: **{categoria}** (Automático)")
+                        if not cards_dict:
+                            st.error("Nenhum cartão de crédito cadastrado. Adicione um cartão abaixo.")
+                        else:
+                            cartao_selecionado_nome = st.selectbox("Cartão", list(cards_dict.keys()))
+                            num_parcelas = st.number_input("Nº de Parcelas", min_value=1, max_value=48, value=1, step=1)
+                    
+                    elif meio_pagamento == "Empréstimo":
+                        categoria = "Empréstimo" # Força a categoria
+                        st.write(f"Categoria: **{categoria}** (Automático)")
+                        num_parcelas = st.number_input("Nº de Parcelas", min_value=1, max_value=120, value=1, step=1)
+
                 elif tipo == 'receita':
                     categoria = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
                 elif tipo == 'investimento':
                     categoria = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
             
             with col_form2:
-                data = st.date_input("Data", datetime.today(), key="add_data")
+                # --- MUDANÇA: Label da data muda ---
+                data_label = "Data da Transação"
+                if tipo == 'despesa' and meio_pagamento == "Cartão de Crédito":
+                    data_label = "Data da Compra"
+                elif tipo == 'despesa' and meio_pagamento == "Empréstimo":
+                    data_label = "Data da Primeira Parcela"
+                
+                data = st.date_input(data_label, datetime.today(), key="add_data")
                 descricao = st.text_input("Descrição", placeholder="Ex: Salário, Aluguel, Ações...", key="add_desc")
             
             submitted_add = st.form_submit_button("Adicionar Transação")
 
             if submitted_add:
-                # 'tipo' já está definido (foi pego fora do form)
-                response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, data)
-                if response:
-                    st.success("Transação adicionada!")
-                    st.cache_data.clear() # Limpa o cache para recarregar os dados
-                    st.rerun()
-                else:
-                    st.error("Falha ao adicionar transação.")
+                # Lógica de submissão
+                try:
+                    # --- MUDANÇA: LÓGICA DE EMPRÉSTIMO ---
+                    if (tipo == 'despesa' and meio_pagamento == "Empréstimo"):
+                        valor_parcela = valor
+                        grupo_id = str(uuid.uuid4())
+                        
+                        batch_list = []
+                        for i in range(num_parcelas): # Loop de 0 a N-1
+                            data_vencimento = data + relativedelta(months=i)
+                            transacao_parcela = {
+                                'user_id': user_id,
+                                'tipo': 'despesa',
+                                'valor': valor_parcela,
+                                'descricao': f"{descricao} ({i+1}/{num_parcelas})",
+                                'categoria': "Empréstimo", # Categoria forçada
+                                'data': str(data_vencimento),
+                                'installment_group_id': grupo_id
+                            }
+                            batch_list.append(transacao_parcela)
+                        
+                        response = sc.add_batch_transactions(batch_list)
+                        if response:
+                            st.success(f"{num_parcelas} parcelas de empréstimo adicionadas!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("Falha ao adicionar parcelas de empréstimo.")
 
-    # --- Histórico de Transações (Obedece o filtro de mês) ---
-    # --- MUDANÇA (Tradução) ---
+                    elif (tipo == 'despesa' and meio_pagamento == "Cartão de Crédito"):
+                        # --- LÓGICA DE PARCELAMENTO CARTÃO ---
+                        if not cartao_selecionado_nome:
+                            st.error("Erro: Nenhum cartão selecionado.")
+                        else:
+                            cartao_info = cards_dict[cartao_selecionado_nome]
+                            valor_parcela = valor # Valor do form É o valor da parcela
+                            grupo_id = str(uuid.uuid4())
+                            
+                            batch_list = []
+                            for i in range(1, num_parcelas + 1):
+                                data_vencimento = calcular_data_vencimento(data, cartao_info['dia_vencimento'], cartao_info['dia_fechamento'], i)
+                                transacao_parcela = {
+                                    'user_id': user_id,
+                                    'tipo': 'despesa',
+                                    'valor': valor_parcela,
+                                    'descricao': f"{descricao} ({i}/{num_parcelas})",
+                                    'categoria': "Cartão de Crédito", # Força a categoria
+                                    'data': str(data_vencimento),
+                                    'card_id': cartao_info['id'],
+                                    'installment_group_id': grupo_id
+                                }
+                                batch_list.append(transacao_parcela)
+                            
+                            response = sc.add_batch_transactions(batch_list)
+                            if response:
+                                st.success(f"{num_parcelas} parcelas de cartão adicionadas!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("Falha ao adicionar parcelas de cartão.")
+
+                    else:
+                        # --- LÓGICA DE TRANSAÇÃO ÚNICA (Receita, Investimento, Despesa à Vista) ---
+                        transacao_data = data # Data padrão
+                        
+                        # (Correção) Categoria precisa ser definida se não for despesa
+                        if tipo == 'receita':
+                            categoria = categoria # Já pego no form
+                        elif tipo == 'investimento':
+                            categoria = categoria # Já pego no form
+                        
+                        response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, transacao_data)
+                        if response:
+                            st.success("Transação adicionada!")
+                            st.cache_data.clear()
+                            st.rerun()
+                        else:
+                            st.error("Falha ao adicionar transação.")
+                except Exception as e:
+                    st.error(f"Erro ao processar transação: {e}")
+
+    # --- NOVO: Expander para Gerenciar Cartões ---
+    with st.expander("💳 Gerenciar Cartões de Crédito"):
+        st.subheader("Adicionar Novo Cartão")
+        with st.form("add_card_form", clear_on_submit=True):
+            col_card1, col_card2, col_card3 = st.columns(3)
+            with col_card1:
+                nome_cartao = st.text_input("Nome do Cartão (Ex: Nubank)")
+            with col_card2:
+                # --- MUDANÇA: Campo de Fechamento ---
+                dia_fechamento = st.number_input("Dia do Fechamento", min_value=1, max_value=31, value=28, step=1)
+            with col_card3:
+                dia_vencimento = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=10, step=1)
+            
+            # Limite separado para mais espaço
+            limite_cartao = st.number_input("Limite (R$)", min_value=0.0, format="%.2f")
+            
+            submitted_card = st.form_submit_button("Adicionar Cartão")
+            
+            if submitted_card:
+                if not nome_cartao or dia_vencimento <= 0 or dia_fechamento <= 0:
+                    st.warning("Preencha todos os campos do cartão.")
+                else:
+                    # --- MUDANÇA: Passa o dia_fechamento ---
+                    response = sc.add_credit_card(user_id, nome_cartao, limite_cartao, dia_vencimento, dia_fechamento)
+                    if response:
+                        st.success(f"Cartão '{nome_cartao}' adicionado!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("Falha ao adicionar cartão.")
+
+        st.subheader("Meus Cartões")
+        if not cards_list:
+            st.info("Nenhum cartão cadastrado.")
+        else:
+            # --- MUDANÇA: Mostra o dia_fechamento ---
+            df_cards = pd.DataFrame(cards_list)[['nome_cartao', 'limite', 'dia_fechamento', 'dia_vencimento']]
+            st.dataframe(df_cards, use_container_width=True, hide_index=True)
+
+
+    # --- Histórico de Transações (agora é um expander) ---
     with st.expander(f"📊 Histórico de Transações de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}"):
         if df_filtered.empty:
             st.info("Nenhuma transação para este mês.")
         else:
+            # --- MUDANÇA: Lógica para Deletar Transação ---
+            st.subheader("Deletar Transação")
+            
+            # Criar um dicionário de mapeamento 'Display String' -> 'ID'
+            # Usamos o ID da transação no dataframe filtrado
+            delete_options_map = {
+                # --- MUDANÇA: Adiciona o ID na frente para evitar duplicatas ---
+                f"ID {row['id']}: {row['data'].strftime('%d/%m/%Y')} - {row['descricao']} - R$ {row['valor']:.2f}": row['id']
+                for index, row in df_filtered.iterrows()
+            }
+            
+            # Adiciona uma opção "Nenhum" no começo
+            options_list = ["Selecione uma transação para deletar..."] + list(delete_options_map.keys())
+            
+            selected_option = st.selectbox("Selecione a Transação", options_list)
+            
+            if st.button("Deletar Transação Selecionada", type="primary", disabled=(selected_option == options_list[0])):
+                try:
+                    # Pega o ID da transação a ser deletada
+                    transaction_id_to_delete = delete_options_map[selected_option]
+                    
+                    # Chama a função do client
+                    response = sc.delete_transaction(transaction_id_to_delete, user_id)
+                    
+                    if response:
+                        st.success("Transação deletada com sucesso!")
+                        st.cache_data.clear() # Limpa o cache
+                        st.rerun()
+                    else:
+                        st.error("Erro ao deletar transação.")
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+
+            # Exibe o dataframe
+            st.subheader("Transações do Mês")
             st.dataframe(
-                df_filtered[['data', 'descricao', 'categoria', 'tipo', 'valor']],
+                # --- MUDANÇA: Mostra o ID da transação ---
+                df_filtered[['id', 'data', 'descricao', 'categoria', 'tipo', 'valor']],
                 use_container_width=True,
                 hide_index=True
             )
- 
+        
+
 # =========================================================================
 # === LÓGICA PRINCIPAL: Decide qual página mostrar (Sem mudanças) =========
 # =========================================================================
