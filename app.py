@@ -125,6 +125,9 @@ def show_main_app():
             ano_atual = datetime.now().year
             mes_atual = datetime.now().month
             df_filtered = df # Cria um dataframe vazio para não quebrar os KPIs mensais
+            # --- CORREÇÃO PARA TRUNCATE ---
+            ano_selecionado = ano_atual
+            mes_selecionado = mes_atual
         else:
             # Filtros de Mês e Ano (como no seu HTML)
             df['ano'] = df['data'].dt.year
@@ -142,7 +145,7 @@ def show_main_app():
             col_filtro1, col_filtro2 = st.columns(2)
             ano_selecionado = col_filtro1.selectbox("Ano", anos_disponiveis, index=anos_disponiveis.index(ano_atual))
             
-            # --- MUDANÇA AQUI ---
+            # --- MUDANÇA (Tradução) ---
             mes_selecionado = col_filtro2.selectbox("Mês", meses_disponiveis, index=meses_disponiveis.index(mes_atual), 
                                                      format_func=lambda x: MESES_PORTUGUES.get(x, x))
 
@@ -163,7 +166,7 @@ def show_main_app():
     col4.metric("Investimentos (Reserva)", f"R$ {investimentos_total:,.2f}")
 
     # --- 3. KPIs MENSAIS (Com filtro de mês) ---
-    # --- MUDANÇA AQUI ---
+    # --- MUDANÇA (Tradução) ---
     st.subheader(f"Resumo de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}/{ano_selecionado}")
     receitas_mes = df_filtered[df_filtered['tipo'] == 'receita']['valor'].sum()
     despesas_mes = df_filtered[df_filtered['tipo'] == 'despesa']['valor'].sum()
@@ -208,7 +211,7 @@ def show_main_app():
                 # 3. Calcula o Saldo ACUMULADO VITALÍCIO
                 df_timeline['saldo_acumulado_total'] = df_timeline['saldo_mensal'].cumsum()
                 
-                # --- MUDANÇA AQUI ---
+                # --- MUDANÇA (Tradução) ---
                 # 4. Cria os labels do eixo X (ex: "Nov/25", "Dez/25", "Jan/26")
                 labels_x = []
                 for ano, mes in df_timeline.index:
@@ -271,7 +274,7 @@ def show_main_app():
     with col_charts_right:
         # --- Gráfico de Despesas (Filtrado por Mês) ---
         with st.container(border=True):
-            # --- MUDANÇA AQUI ---
+            # --- MUDANÇA (Tradução) ---
             st.subheader(f"🏷️ Despesas de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}")
             df_despesas = df_filtered[df_filtered['tipo'] == 'despesa'] # Usa df_filtered
             if not df_despesas.empty:
@@ -357,7 +360,7 @@ def show_main_app():
                     st.error("Falha ao adicionar transação.")
 
     # --- Histórico de Transações (Obedece o filtro de mês) ---
-    # --- MUDANÇA AQUI ---
+    # --- MUDANÇA (Tradução) ---
     with st.expander(f"📊 Histórico de Transações de {MESES_PORTUGUES.get(mes_selecionado, mes_selecionado)}"):
         if df_filtered.empty:
             st.info("Nenhuma transação para este mês.")
