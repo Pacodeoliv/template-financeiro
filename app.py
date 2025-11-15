@@ -219,16 +219,16 @@ def show_main_app():
     col_charts_left, col_charts_right = st.columns([2, 1], gap="large") # 2fr 1fr
 
     with col_charts_left:
-        # --- GRÁFICO DE TENDÊNCIA (MUDANÇA: AGORA É POR DIA) ---
+        # --- MUDANÇA: GRÁFICO DE TENDÊNCIA (Visão Mensal com 3 Barras) ---
         with st.container(border=True):
             st.subheader(f"📈 Tendência Acumulada (Toda a História)")
             
             if df.empty:
                 st.info(f"Sem dados de transação para mostrar a tendência.")
             else:
-                # 1. Agrupa por DATA (dia)
+                # 1. Agrupa por ANO e MÊS (Voltamos a agrupar)
                 df_timeline = df.pivot_table(
-                    index='data', # <<< MUDANÇA: Agrupa por 'data'
+                    index=['ano', 'mes'],
                     columns='tipo',
                     values='valor',
                     aggfunc='sum'
@@ -239,13 +239,18 @@ def show_main_app():
                     if col not in df_timeline:
                         df_timeline[col] = 0
                         
-                # 2. Calcula o saldo DIÁRIO
-                df_timeline['saldo_diario'] = df_timeline['receita'] - df_timeline['despesa']
+                # 2. Calcula o saldo MENSAL (Fluxo de Caixa)
+                df_timeline['saldo_mensal'] = df_timeline['receita'] - df_timeline['despesa']
                 
                 # 3. Calcula o Saldo ACUMULADO VITALÍCIO
-                df_timeline['saldo_acumulado_total'] = df_timeline['saldo_diario'].cumsum()
+                df_timeline['saldo_acumulado_total'] = df_timeline['saldo_mensal'].cumsum()
                 
-                # 4. O Eixo X agora é o próprio index (as datas)
+                # 4. Cria os labels do eixo X (ex: "Nov/25", "Dez/25", "Jan/26")
+                labels_x = []
+                for ano, mes in df_timeline.index:
+                    nome_mes_abrev = MESES_PORTUGUES.get(int(mes), str(mes))[:3] # Pega os 3 primeiros caracteres
+                    ano_abrev = str(ano)[2:] # Pega os 2 últimos dígitos
+                    labels_x.append(f"{nome_mes_abrev}/{ano_abrev}")
                 
                 # --- 5. Cria o Gráfico Combinado ---
                 fig_timeline = go.Figure()
@@ -253,31 +258,31 @@ def show_main_app():
                 # --- 3 BARRAS + 1 LINHA ---
                 # Barra de Receita
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA
+                    x=labels_x,
                     y=df_timeline['receita'],
-                    name='Receita (Dia)',
+                    name='Receita (Mês)',
                     marker_color='#10b981'
                 ))
                 
                 # Barra de Despesa
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA
+                    x=labels_x,
                     y=df_timeline['despesa'],
-                    name='Despesa (Dia)',
+                    name='Despesa (Mês)',
                     marker_color='#ef4444'
                 ))
                 
                 # Barra de Investimento
                 fig_timeline.add_trace(go.Bar(
-                    x=df_timeline.index, # <<< MUDANÇA
+                    x=labels_x,
                     y=df_timeline['investimento'],
-                    name='Investimento (Dia)',
+                    name='Investimento (Mês)',
                     marker_color='#FFC300' # Amarelo/Ouro
                 ))
                 
                 # Linha de Saldo ACUMULADO TOTAL
                 fig_timeline.add_trace(go.Scatter(
-                    x=df_timeline.index, # <<< MUDANÇA
+                    x=labels_x,
                     y=df_timeline['saldo_acumulado_total'], 
                     name='Saldo Acumulado (Vitalício)',
                     mode='lines+markers',
@@ -286,9 +291,9 @@ def show_main_app():
 
                 # Configura o layout
                 fig_timeline.update_layout(
-                    barmode='group',  # Agrupa as barras
+                    barmode='group',  # <-- MUDANÇA: Agrupa as barras
                     title=f"Fluxo de Caixa vs. Saldo Acumulado (Toda a História)",
-                    xaxis_title="Data", # <<< MUDANÇA
+                    xaxis_title="Mês/Ano",
                     yaxis_title="Valor (R$)",
                     legend_title="Métricas",
                     plot_bgcolor='#0E1117', # Fundo do gráfico
@@ -362,6 +367,11 @@ def show_main_app():
             meio_pagamento = st.radio("Meio de Pagamento", ["À Vista (Dinheiro/Débito)", "Cartão de Crédito", "Empréstimo"], key="payment_method", horizontal=True)
 
         with st.form("add_form", clear_on_submit=True):
+            
+            # --- CORREÇÃO DO BUG: Variável única para Categoria ---
+            categoria_final = None
+            # ----------------------------------------------------
+            
             col_form1, col_form2 = st.columns(2)
             
             with col_form1:
@@ -378,13 +388,17 @@ def show_main_app():
                 cartao_selecionado_nome = None
                 num_parcelas = 1
                 
+                # --- MUDANÇA: Categoria é selecionada ANTES do meio de pagamento ---
                 if tipo == 'despesa':
-                    if meio_pagamento == "À Vista":
-                        categoria = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
-                    
-                    elif meio_pagamento == "Cartão de Crédito":
-                        categoria = "Cartão de Crédito" # Força a categoria
-                        st.write(f"Categoria: **{categoria}** (Automático)")
+                    categoria_final = st.selectbox("Categoria", CATEGORIAS_DESPESA, key="add_cat_des")
+                elif tipo == 'receita':
+                    categoria_final = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
+                elif tipo == 'investimento':
+                    categoria_final = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
+
+                # --- MUDANÇA: Lógica de Pagamento SÓ adiciona campos extras ---
+                if tipo == 'despesa':
+                    if meio_pagamento == "Cartão de Crédito":
                         if not cards_dict:
                             st.error("Nenhum cartão de crédito cadastrado. Adicione um cartão abaixo.")
                         else:
@@ -392,14 +406,8 @@ def show_main_app():
                             num_parcelas = st.number_input("Nº de Parcelas", min_value=1, max_value=48, value=1, step=1)
                     
                     elif meio_pagamento == "Empréstimo":
-                        categoria = "Empréstimo" # Força a categoria
-                        st.write(f"Categoria: **{categoria}** (Automático)")
                         num_parcelas = st.number_input("Nº de Parcelas", min_value=1, max_value=120, value=1, step=1)
 
-                elif tipo == 'receita':
-                    categoria = st.selectbox("Categoria", CATEGORIAS_RECEITA, key="add_cat_rec")
-                elif tipo == 'investimento':
-                    categoria = st.selectbox("Categoria", CATEGORIAS_INVESTIMENTO, key="add_cat_inv")
             
             with col_form2:
                 # --- MUDANÇA: Label da data muda ---
@@ -417,11 +425,13 @@ def show_main_app():
             if submitted_add:
                 # Lógica de submissão
                 try:
-                    # --- MUDANÇA: LÓGICA DE EMPRÉSTIMO ---
-                    if (tipo == 'despesa' and meio_pagamento == "Empréstimo"):
+                    # --- MUDANÇA: LÓGICA DE SUBMISSÃO ISOLADA ---
+                    
+                    response = None # Inicializa a resposta
+                    
+                    if tipo == 'despesa' and meio_pagamento == "Empréstimo":
                         valor_parcela = valor
                         grupo_id = str(uuid.uuid4())
-                        
                         batch_list = []
                         for i in range(num_parcelas): # Loop de 0 a N-1
                             data_vencimento = data + relativedelta(months=i)
@@ -430,29 +440,21 @@ def show_main_app():
                                 'tipo': 'despesa',
                                 'valor': valor_parcela,
                                 'descricao': f"{descricao} ({i+1}/{num_parcelas})",
-                                'categoria': "Empréstimo", # Categoria forçada
+                                'categoria': categoria_final, # <-- CORREÇÃO
                                 'data': str(data_vencimento),
                                 'installment_group_id': grupo_id
                             }
                             batch_list.append(transacao_parcela)
-                        
                         response = sc.add_batch_transactions(batch_list)
-                        if response:
-                            st.success(f"{num_parcelas} parcelas de empréstimo adicionadas!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        else:
-                            st.error("Falha ao adicionar parcelas de empréstimo.")
 
-                    elif (tipo == 'despesa' and meio_pagamento == "Cartão de Crédito"):
-                        # --- LÓGICA DE PARCELAMENTO CARTÃO ---
+                    elif tipo == 'despesa' and meio_pagamento == "Cartão de Crédito":
                         if not cartao_selecionado_nome:
                             st.error("Erro: Nenhum cartão selecionado.")
+                            # response continua None
                         else:
                             cartao_info = cards_dict[cartao_selecionado_nome]
                             valor_parcela = valor # Valor do form É o valor da parcela
                             grupo_id = str(uuid.uuid4())
-                            
                             batch_list = []
                             for i in range(1, num_parcelas + 1):
                                 data_vencimento = calcular_data_vencimento(data, cartao_info['dia_vencimento'], cartao_info['dia_fechamento'], i)
@@ -461,38 +463,39 @@ def show_main_app():
                                     'tipo': 'despesa',
                                     'valor': valor_parcela,
                                     'descricao': f"{descricao} ({i}/{num_parcelas})",
-                                    'categoria': "Cartão de Crédito", # Força a categoria
+                                    'categoria': categoria_final, # <-- CORREÇÃO
                                     'data': str(data_vencimento),
                                     'card_id': cartao_info['id'],
                                     'installment_group_id': grupo_id
                                 }
                                 batch_list.append(transacao_parcela)
-                            
                             response = sc.add_batch_transactions(batch_list)
-                            if response:
-                                st.success(f"{num_parcelas} parcelas de cartão adicionadas!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            else:
-                                st.error("Falha ao adicionar parcelas de cartão.")
 
-                    else:
-                        # --- LÓGICA DE TRANSAÇÃO ÚNICA (Receita, Investimento, Despesa à Vista) ---
+                    elif tipo == 'despesa' and meio_pagamento == "À Vista":
                         transacao_data = data # Data padrão
-                        
-                        # (Correção) Categoria precisa ser definida se não for despesa
-                        if tipo == 'receita':
-                            categoria = categoria # Já pego no form
-                        elif tipo == 'investimento':
-                            categoria = categoria # Já pego no form
-                        
-                        response = sc.add_transaction(user_id, tipo, valor, descricao, categoria, transacao_data)
-                        if response:
-                            st.success("Transação adicionada!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        else:
+                        card_id = None # Padrão
+                        response = sc.add_transaction(user_id, tipo, valor, descricao, categoria_final, transacao_data, card_id)
+
+                    elif tipo == 'receita':
+                        transacao_data = data
+                        card_id = None
+                        response = sc.add_transaction(user_id, tipo, valor, descricao, categoria_final, transacao_data, card_id)
+
+                    elif tipo == 'investimento':
+                        transacao_data = data
+                        card_id = None
+                        response = sc.add_transaction(user_id, tipo, valor, descricao, categoria_final, transacao_data, card_id)
+
+                    # --- VERIFICAÇÃO DE SUCESSO CENTRALIZADA ---
+                    if response:
+                        st.success("Transação adicionada!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        # Se response é None (ex: erro no cartão), não mostra msg duplicada
+                        if cartao_selecionado_nome is not None: 
                             st.error("Falha ao adicionar transação.")
+                
                 except Exception as e:
                     st.error(f"Erro ao processar transação: {e}")
 
